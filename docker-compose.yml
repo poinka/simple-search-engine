@@ -19,9 +19,10 @@ services:
     tty: true
     working_dir: /app
     # You can comment the entrypoint to run the script manually inside the container
-    entrypoint: 
-      - bash
-      - /app/app.sh
+    # entrypoint: 
+    #   - bash
+    #   - /app/app.sh
+    platform: linux/amd64
     
   cluster-slave-1:
     image: firasj/spark-docker-cluster
@@ -30,6 +31,7 @@ services:
       - spark-cluster
     hostname: cluster-slave-1
     tty: true
+    platform: linux/amd64
   # cluster-slave-2:
   #   image: firasj/spark-docker-cluster
   #   container_name: cluster-slave-2

@@ -1,0 +1,1 @@
+B notation or B-notation may refer to: * B notation (scientific notation), equivalent to E notation but for base-2 exponents * B notation (fixed point format), to specify the format of scaled binary fixed-point numbers * B method, a method of software development

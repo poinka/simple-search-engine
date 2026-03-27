@@ -1,0 +1,1 @@
+The B-theorem is a mathematical finite group theory result formerly known as the B-conjecture. The theorem states that if C is the centralizer of an involution of a finite group, then every component of C/O(C) is the image of a component of C . ==References== Category:Theorems about finite groups Category:Conjectures that have been proved

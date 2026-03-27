@@ -1,5 +1,14 @@
 #!/bin/bash
 # This will run only by the master node
+set -e
+
+# Force Hadoop to use only the actually deployed worker
+printf "cluster-slave-1\n" > $HADOOP_HOME/etc/hadoop/workers
+printf "cluster-slave-1\n" > $HADOOP_HOME/etc/hadoop/slaves
+
+echo "Workers configured as:"
+cat $HADOOP_HOME/etc/hadoop/workers
+cat $HADOOP_HOME/etc/hadoop/slaves
 
 # starting HDFS daemons
 $HADOOP_HOME/sbin/start-dfs.sh
