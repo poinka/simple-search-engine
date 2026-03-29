@@ -139,6 +139,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.venv-indexer/
+.venv-query/
+.venv-indexer.tar.gz
+.venv-query.tar.gz
 
 # Spyder project settings
 .spyderproject

@@ -1,5 +1,5 @@
-import sys
 import re
+import sys
 from collections import Counter
 
 TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -25,9 +25,7 @@ for line in sys.stdin:
 
     tf_counter = Counter(tokens)
 
-    # document stats line
-    print(f"DOC\t{doc_id}\t{title}\t{doc_len}")
+    print(f"!DOC\t{doc_id}\t{title}\t{doc_len}")
 
-    # postings lines
     for term, tf in tf_counter.items():
-        print(f"TERM\t{term}\t{doc_id}\t{title}\t{tf}\t{doc_len}")
+        print(f"{term}\t{doc_id}\t{title}\t{tf}\t{doc_len}")

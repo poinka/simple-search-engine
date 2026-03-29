@@ -1,26 +1,47 @@
 #!/bin/bash
-# Start ssh server
-service ssh restart 
+set -euo pipefail
 
-# Starting the services
-bash start-services.sh
+cd /app
 
-# Creating a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+service ssh restart || true
 
-# Install any packages
-pip install -r requirements.txt  
+bash /app/start-services.sh
 
-# Package the virtual env.
-venv-pack -o .venv.tar.gz
+# Environment for indexer
+rm -rf /app/.venv-indexer
+python3 -m venv /app/.venv-indexer
+source /app/.venv-indexer/bin/activate
 
-# Collect data
-bash prepare_data.sh
+pip install --upgrade pip
+pip install -r /app/requirements-indexer.txt
+pip install venv-pack
 
+rm -f /app/.venv-indexer.tar.gz
+venv-pack -p /app/.venv-indexer -o /app/.venv-indexer.tar.gz
 
-# Run the indexer
-bash index.sh
+# Run preparation + indexing with indexer env
+bash /app/prepare_data.sh
+bash /app/index.sh
 
-# Run the ranker
-bash search.sh "this is a query!"
+deactivate
+
+# Environment for query
+rm -rf /app/.venv-query
+python3 -m venv /app/.venv-query
+source /app/.venv-query/bin/activate
+
+pip install --upgrade pip
+pip install -r /app/requirements-query.txt
+pip install venv-pack
+
+rm -f /app/.venv-query.tar.gz
+venv-pack -p /app/.venv-query -o /app/.venv-query.tar.gz
+
+deactivate
+
+# Upload lightweight query env to HDFS once
+hdfs dfs -mkdir -p /user/root || true
+hdfs dfs -put -f /app/.venv-query.tar.gz /user/root/.venv-query.tar.gz
+
+echo "Pipeline finished successfully. Keeping container alive."
+tail -f /dev/null

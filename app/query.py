@@ -1,101 +1,139 @@
 #!/usr/bin/env python3
-import sys
 import math
+import os
 import re
-from collections import defaultdict
+import sys
+from typing import List, Tuple
 
 from cassandra.cluster import Cluster
 from pyspark.sql import SparkSession
 
 KEYSPACE = "search_engine"
-CASSANDRA_HOST = "cassandra-server"
+CASSANDRA_HOST = os.environ.get("CASSANDRA_HOST", "cassandra-server")
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 K1 = 1.2
 B = 0.75
 
 
-def tokenize(text: str):
+def read_query() -> str:
+    if len(sys.argv) > 1:
+        return " ".join(sys.argv[1:]).strip()
+    return sys.stdin.readline().strip()
+
+
+def tokenize(text: str) -> List[str]:
     return TOKEN_RE.findall(text.lower())
 
 
-def bm25(tf: int, df: int, dl: int, avgdl: float, N: int):
-    idf = math.log(1.0 + (N - df + 0.5) / (df + 0.5))
-    denom = tf + K1 * (1 - B + B * dl / avgdl)
-    return idf * (tf * (K1 + 1)) / denom
+def bm25(tf: int, df: int, dl: int, avgdl: float, n_docs: int) -> float:
+    idf = math.log(1.0 + (n_docs - df + 0.5) / (df + 0.5))
+    denom = tf + K1 * (1.0 - B + B * dl / avgdl)
+    return idf * (tf * (K1 + 1.0)) / denom
 
 
-def get_stat(session, name: str):
-    row = session.execute(
-        "SELECT value FROM stats WHERE name = %s",
-        (name,)
-    ).one()
+def get_stat(session, name: str) -> float:
+    row = session.execute("SELECT value FROM stats WHERE name = %s", (name,)).one()
     if row is None:
-        raise RuntimeError(f"Missing stat: {name}")
+        raise RuntimeError(f"Missing stat in Cassandra: {name}")
     return float(row.value)
 
 
+def load_term_dfs(session, query_terms: List[str]) -> List[Tuple[str, int]]:
+    stmt = session.prepare("SELECT df FROM vocabulary WHERE term = ?")
+    found = []
+    for term in query_terms:
+        row = session.execute(stmt, (term,)).one()
+        if row is not None:
+            found.append((term, int(row.df)))
+    return found
+
+
+def load_postings(session, term_dfs: List[Tuple[str, int]]):
+    stmt = session.prepare(
+        "SELECT doc_id, tf, doc_len, title FROM index_data WHERE term = ?"
+    )
+    postings = []
+    for term, df in term_dfs:
+        rows = session.execute(stmt, (term,))
+        for row in rows:
+            postings.append((
+                str(row.doc_id),
+                str(row.title),
+                int(row.tf),
+                int(row.doc_len),
+                int(df),
+            ))
+    return postings
+
+
 def main():
-    query = " ".join(sys.argv[1:]).strip()
+    query = read_query()
     if not query:
-        print("Usage: python query.py <search query>")
+        print("Empty query.")
         sys.exit(1)
 
-    query_terms = tokenize(query)
+    query_terms = list(dict.fromkeys(tokenize(query)))
     if not query_terms:
         print("No valid query terms.")
         sys.exit(0)
 
     cluster = Cluster([CASSANDRA_HOST])
     session = cluster.connect(KEYSPACE)
+    try:
+        n_docs = int(get_stat(session, "N"))
+        avgdl = float(get_stat(session, "AVGDL"))
+        term_dfs = load_term_dfs(session, query_terms)
 
-    N = int(get_stat(session, "N"))
-    avgdl = float(get_stat(session, "AVGDL"))
+        if not term_dfs:
+            print(f"Query: {query}")
+            print("Top 10 results:")
+            print("No matching documents found.")
+            return
 
-    all_postings = []
-    for term in query_terms:
-        rows = session.execute(
-            "SELECT term, doc_id, tf, doc_len, title, df FROM postings WHERE term = %s",
-            (term,)
-        )
-        for row in rows:
-            all_postings.append(
-                (row.term, row.doc_id, int(row.tf), int(row.doc_len), row.title, int(row.df))
-            )
-
-    if not all_postings:
-        print("No matching documents found.")
+        postings = load_postings(session, term_dfs)
+    finally:
         session.shutdown()
         cluster.shutdown()
-        sys.exit(0)
 
-    spark = (
-        SparkSession.builder
-        .appName("search-query")
-        .master("local[*]")
-        .getOrCreate()
-    )
+    spark = SparkSession.builder.appName("search-query").getOrCreate()
     sc = spark.sparkContext
 
-    rdd = sc.parallelize(all_postings)
+    try:
+        postings_rdd = sc.parallelize(postings, numSlices=max(1, min(4, len(term_dfs))))
 
-    scored = (
-        rdd.map(lambda x: (
-            x[1],  # doc_id
-            (bm25(x[2], x[5], x[3], avgdl, N), x[4])  # score, title
-        ))
-        .reduceByKey(lambda a, b: (a[0] + b[0], a[1]))
-        .map(lambda x: (x[0], x[1][1], x[1][0]))  # doc_id, title, score
-        .takeOrdered(10, key=lambda x: -x[2])
-    )
+        scored_rdd = postings_rdd.map(
+            lambda x: (
+                x[0],
+                (
+                    bm25(
+                        tf=x[2],
+                        df=x[4],
+                        dl=x[3],
+                        avgdl=avgdl,
+                        n_docs=n_docs,
+                    ),
+                    x[1],
+                ),
+            )
+        )
 
-    print(f"Query: {query}")
-    print("Top 10 results:")
-    for rank, (doc_id, title, score) in enumerate(scored, start=1):
-        print(f"{rank}\t{doc_id}\t{title}\t{score:.6f}")
+        top_docs = (
+            scored_rdd
+            .reduceByKey(lambda a, b: (a[0] + b[0], a[1]))
+            .map(lambda x: (x[0], x[1][1], x[1][0]))
+            .takeOrdered(10, key=lambda x: -x[2])
+        )
 
-    spark.stop()
-    session.shutdown()
-    cluster.shutdown()
+        print(f"Query: {query}")
+        print("Top 10 results:")
+        if not top_docs:
+            print("No matching documents found.")
+            return
+
+        for rank, (doc_id, title, score) in enumerate(top_docs, start=1):
+            print(f"{rank}\t{doc_id}\t{title}\t{score:.6f}")
+    finally:
+        spark.stop()
 
 
 if __name__ == "__main__":
