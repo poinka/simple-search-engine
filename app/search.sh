@@ -7,22 +7,28 @@ if [ "$#" -eq 0 ]; then
 fi
 
 QUERY="$*"
+QUERY_VENV=/app/.venv-query
+export CASSANDRA_HOST=${CASSANDRA_HOST:-cassandra-server}
 
-source /app/.venv/bin/activate
+if [ ! -f "${QUERY_VENV}/bin/activate" ]; then
+  echo "Query virtual environment not found at ${QUERY_VENV}"
+  exit 1
+fi
 
-export PYSPARK_DRIVER_PYTHON=/app/.venv/bin/python
-export PYSPARK_PYTHON=./.venv/bin/python
-export CASSANDRA_HOST=cassandra-server
+source "${QUERY_VENV}/bin/activate"
+
+export PYSPARK_DRIVER_PYTHON="${QUERY_VENV}/bin/python"
+unset PYSPARK_PYTHON
 
 spark-submit \
   --master yarn \
   --deploy-mode client \
   --archives hdfs:///user/root/.venv-query.tar.gz#.venv \
-  --conf spark.yarn.archive=hdfs:///apps/spark/spark-jars.zip \
+  --conf spark.yarn.jars=hdfs:///apps/spark/jars/* \
   --conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=./.venv/bin/python \
   --conf spark.executorEnv.PYSPARK_PYTHON=./.venv/bin/python \
-  --conf spark.yarn.appMasterEnv.CASSANDRA_HOST=cassandra-server \
-  --conf spark.executorEnv.CASSANDRA_HOST=cassandra-server \
+  --conf spark.yarn.appMasterEnv.CASSANDRA_HOST="${CASSANDRA_HOST}" \
+  --conf spark.executorEnv.CASSANDRA_HOST="${CASSANDRA_HOST}" \
   --conf spark.executor.instances=1 \
   --conf spark.executor.cores=1 \
   --conf spark.yarn.am.cores=1 \

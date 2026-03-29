@@ -3,7 +3,7 @@ import subprocess
 from cassandra.cluster import Cluster
 
 KEYSPACE = "search_engine"
-CASSANDRA_HOST = "cassandra-server"
+CASSANDRA_HOST = os.environ.get("CASSANDRA_HOST", "cassandra-server")
 
 
 def hdfs_cat(path: str):

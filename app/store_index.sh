@@ -1,21 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
-source /app/.venv/bin/activate
+INDEXER_VENV=/app/.venv-indexer
+export CASSANDRA_HOST=${CASSANDRA_HOST:-cassandra-server}
 
-echo "Waiting for Cassandra..."
+if [ ! -f "${INDEXER_VENV}/bin/activate" ]; then
+  echo "Indexer virtual environment not found at ${INDEXER_VENV}"
+  exit 1
+fi
+
+source "${INDEXER_VENV}/bin/activate"
+
+echo "Waiting for Cassandra at ${CASSANDRA_HOST}..."
 for i in $(seq 1 30); do
   if python - <<'PY'
+import os
 from cassandra.cluster import Cluster
-cluster = Cluster(["cassandra-server"])
+
+host = os.environ.get("CASSANDRA_HOST", "cassandra-server")
+cluster = Cluster([host])
 session = cluster.connect()
 session.shutdown()
 cluster.shutdown()
-print("Connected to Cassandra")
+print(f"Connected to Cassandra at {host}")
 PY
   then
     break
   fi
+
   echo "Cassandra is not ready yet. Retry ${i}/30..."
   sleep 5
 done
