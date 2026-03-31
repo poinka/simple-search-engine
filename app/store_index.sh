@@ -12,6 +12,8 @@ fi
 source "${INDEXER_VENV}/bin/activate"
 
 echo "Waiting for Cassandra at ${CASSANDRA_HOST}..."
+CONNECTED=0
+
 for i in $(seq 1 30); do
   if python - <<'PY'
 import os
@@ -25,6 +27,7 @@ cluster.shutdown()
 print(f"Connected to Cassandra at {host}")
 PY
   then
+    CONNECTED=1
     break
   fi
 
