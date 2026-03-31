@@ -3,7 +3,8 @@ import math
 import os
 import re
 import sys
-from typing import List, Tuple
+from collections import Counter
+from typing import Dict, List, Tuple
 
 from cassandra.cluster import Cluster
 from pyspark.sql import SparkSession
@@ -56,13 +57,16 @@ def load_postings(session, term_dfs: List[Tuple[str, int]]):
     for term, df in term_dfs:
         rows = session.execute(stmt, (term,))
         for row in rows:
-            postings.append((
-                str(row.doc_id),
-                str(row.title),
-                int(row.tf),
-                int(row.doc_len),
-                int(df),
-            ))
+            postings.append(
+                (
+                    term,
+                    str(row.doc_id),
+                    str(row.title),
+                    int(row.tf),
+                    int(row.doc_len),
+                    int(df),
+                )
+            )
     return postings
 
 
@@ -72,17 +76,21 @@ def main():
         print("Empty query.")
         sys.exit(1)
 
-    query_terms = list(dict.fromkeys(tokenize(query)))
-    if not query_terms:
+    query_tokens = tokenize(query)
+    if not query_tokens:
         print("No valid query terms.")
         sys.exit(0)
 
+    query_tf: Dict[str, int] = Counter(query_tokens)
+    unique_terms = list(query_tf.keys())
+
     cluster = Cluster([CASSANDRA_HOST])
     session = cluster.connect(KEYSPACE)
+
     try:
         n_docs = int(get_stat(session, "N"))
         avgdl = float(get_stat(session, "AVGDL"))
-        term_dfs = load_term_dfs(session, query_terms)
+        term_dfs = load_term_dfs(session, unique_terms)
 
         if not term_dfs:
             print(f"Query: {query}")
@@ -99,20 +107,21 @@ def main():
     sc = spark.sparkContext
 
     try:
-        postings_rdd = sc.parallelize(postings, numSlices=max(1, min(4, len(term_dfs))))
+        num_slices = max(1, min(8, len(postings))) if postings else 1
+        postings_rdd = sc.parallelize(postings, numSlices=num_slices)
 
         scored_rdd = postings_rdd.map(
             lambda x: (
-                x[0],
+                x[1],  # doc_id
                 (
                     bm25(
-                        tf=x[2],
-                        df=x[4],
-                        dl=x[3],
+                        tf=x[3],
+                        df=x[5],
+                        dl=x[4],
                         avgdl=avgdl,
                         n_docs=n_docs,
-                    ),
-                    x[1],
+                    ) * query_tf[x[0]],
+                    x[2],  # title
                 ),
             )
         )

@@ -8,7 +8,7 @@ This folder stores the text documents required to index. Here you can find a sam
 This folder stores the mapper `mapper1.py` and reducer `reducer1.py` scripts for the MapReduce pipelines.
 
 ### app.py
-This is a Python file to write code to store index data in Cassandra.
+This is a Python file to write code to store index data in Cassandra. It loads the index data from HDFS and writes it to Cassandra/ScyllaDB tables. This file is called in `store_index.sh` script.
 
 ### app.sh
 The entrypoint for the executables in your repository and includes all commands that will run your programs in this folder.
@@ -37,6 +37,9 @@ This file contains all Python depenedencies that are needed for the indexing par
 ### requirements-query.txt
 This file contains all Python depenedencies that are needed for the querying part of the project.
 
+### requirements.txt
+This file contains all Python depenedencies that are needed for the project.
+
 ### search.sh
 This script will be responsible for running the `query.py` PySpark app on Hadoop YARN cluster.
 
@@ -45,6 +48,3 @@ This script will initiate the services required to run Hadoop components. This s
 
 ### store_index.sh
 This script will create Cassandra/ScyllaDB tables and load the index data from HDFS to them using the `store_index.py` script.
-
-### store_index.py
-A Python file to write code to create Cassandra/ScyllaDB tables and load the index data from HDFS to them.

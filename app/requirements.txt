@@ -1,0 +1,7 @@
+cassandra-driver
+venv-pack
+pyarrow
+fastparquet
+pathvalidate
+pyspark==3.5.4
+tqdm

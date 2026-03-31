@@ -43,5 +43,16 @@ deactivate
 hdfs dfs -mkdir -p /user/root || true
 hdfs dfs -put -f /app/.venv-query.tar.gz /user/root/.venv-query.tar.gz
 
+echo "Running demo search queries..."
+
+for query in "movie" "hospital" "theologian"; do
+  echo
+  echo "=================================================="
+  echo "Demo query: ${query}"
+  echo "=================================================="
+  bash /app/search.sh "${query}" || echo "Search failed for query: ${query}"
+done
+
+echo
 echo "Pipeline finished successfully. Keeping container alive."
 tail -f /dev/null

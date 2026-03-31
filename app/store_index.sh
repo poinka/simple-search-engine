@@ -32,7 +32,12 @@ PY
   sleep 5
 done
 
+if [ "${CONNECTED}" -ne 1 ]; then
+  echo "Cassandra did not become ready in time."
+  exit 1
+fi
+
 echo "Loading index from HDFS into Cassandra..."
-python /app/store_index.py
+python /app/app.py
 
 echo "Done loading index into Cassandra."

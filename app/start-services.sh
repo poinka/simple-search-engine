@@ -1,52 +1,50 @@
 #!/bin/bash
-# This will run only by the master node
-set -e
+set -euo pipefail
 
-# Force Hadoop to use only the actually deployed worker
-printf "cluster-slave-1\n" > $HADOOP_HOME/etc/hadoop/workers
-printf "cluster-slave-1\n" > $HADOOP_HOME/etc/hadoop/slaves
+# This should run only on the master node
+printf "cluster-slave-1\n" > "$HADOOP_HOME/etc/hadoop/workers"
+printf "cluster-slave-1\n" > "$HADOOP_HOME/etc/hadoop/slaves"
 
 echo "Workers configured as:"
-cat $HADOOP_HOME/etc/hadoop/workers
-cat $HADOOP_HOME/etc/hadoop/slaves
+cat "$HADOOP_HOME/etc/hadoop/workers"
+cat "$HADOOP_HOME/etc/hadoop/slaves"
 
-# starting HDFS daemons
-$HADOOP_HOME/sbin/start-dfs.sh
+# Start Hadoop services
+"$HADOOP_HOME/sbin/start-dfs.sh" || true
+"$HADOOP_HOME/sbin/start-yarn.sh" || true
+mapred --daemon start historyserver || true
 
-# starting Yarn daemons
-$HADOOP_HOME/sbin/start-yarn.sh
-# yarn --daemon start resourcemanager
+echo
+echo "Java processes:"
+jps -lm || true
 
-# Start mapreduce history server
-mapred --daemon start historyserver
+echo
+echo "HDFS report:"
+hdfs dfsadmin -report || true
 
+# Leave safe mode if needed
+hdfs dfsadmin -safemode leave || true
 
-# track process IDs of services
-jps -lm
-
-# subtool to perform administrator functions on HDFS
-# outputs a brief report on the overall HDFS filesystem
-hdfs dfsadmin -report
-
-# If namenode in safemode then leave it
-hdfs dfsadmin -safemode leave
-
-# create a directory for spark apps in HDFS
+# Prepare HDFS directories
 hdfs dfs -mkdir -p /apps/spark/jars
-hdfs dfs -chmod 744 /apps/spark/jars
-
-
-# Copy all jars to HDFS
-hdfs dfs -put /usr/local/spark/jars/* /apps/spark/jars/
-hdfs dfs -chmod +rx /apps/spark/jars/
-
-
-# print version of Scala of Spark
-scala -version
-
-# track process IDs of services
-jps -lm
-
-# Create a directory for root user on HDFS
 hdfs dfs -mkdir -p /user/root
 
+# Refresh Spark jars in HDFS so repeated runs do not fail
+hdfs dfs -rm -r -f /apps/spark/jars/* || true
+hdfs dfs -put -f /usr/local/spark/jars/* /apps/spark/jars/
+
+# Permissions
+hdfs dfs -chmod -R 755 /apps/spark/jars || true
+hdfs dfs -chmod 755 /user/root || true
+
+echo
+echo "Scala version:"
+scala -version || true
+
+echo
+echo "Java processes after setup:"
+jps -lm || true
+
+echo
+echo "Spark jars in HDFS:"
+hdfs dfs -ls /apps/spark/jars | head -20 || true

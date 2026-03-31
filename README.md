@@ -1,4 +1,6 @@
-# big-data-assignment2
+# Simple Search Engine
+## Big Data Assignment 2
+This repository contains a simple search engine implementation using Hadoop MapReduce and Cassandra/ScyllaDB. The search engine will index a collection of documents and will allow users to search for relevant documents based on their queries using BM25 ranking algorithm.
 
 # How to run
 ## Step 1: Install prerequisites
@@ -6,8 +8,8 @@
 - Docker compose
 ## Step 2: Clone the repository
 ```bash
-git clone https://github.com/poinka/big-data-assignment2.git
-cd big-data-assignment2
+git clone https://github.com/poinka/simple-search-engine.git
+cd simple-search-engine
 ```
 ## Step 3: Download the dataset
 Download the parquet file from [here](https://www.kaggle.com/datasets/jjinho/wikipedia-20230701?select=b.parquet) and place it in the `app` folder. The file should end with `.parquet`.
