@@ -14,10 +14,6 @@ source /app/.venv-indexer/bin/activate
 
 pip install --upgrade pip
 pip install -r /app/requirements-indexer.txt
-pip install venv-pack
-
-rm -f /app/.venv-indexer.tar.gz
-venv-pack -p /app/.venv-indexer -o /app/.venv-indexer.tar.gz
 
 # Run preparation + indexing with indexer env
 bash /app/prepare_data.sh
@@ -32,16 +28,24 @@ source /app/.venv-query/bin/activate
 
 pip install --upgrade pip
 pip install -r /app/requirements-query.txt
-pip install venv-pack
 
-rm -f /app/.venv-query.tar.gz
-venv-pack -p /app/.venv-query -o /app/.venv-query.tar.gz
 
-deactivate
+echo "Ensuring YARN worker is ready before demo queries..."
+READY=0
+for i in $(seq 1 24); do
+  if yarn node -list 2>/dev/null | grep -q "RUNNING"; then
+    READY=1
+    echo "YARN worker is ready."
+    break
+  fi
+  echo "Waiting for YARN worker... ${i}/24"
+  sleep 5
+done
 
-# Upload lightweight query env to HDFS once
-hdfs dfs -mkdir -p /user/root || true
-hdfs dfs -put -f /app/.venv-query.tar.gz /user/root/.venv-query.tar.gz
+if [ "$READY" -ne 1 ]; then
+  echo "YARN worker did not become ready. Skipping demo queries."
+  tail -f /dev/null
+fi
 
 echo "Running demo search queries..."
 
@@ -53,6 +57,6 @@ for query in "movie" "hospital" "theologian"; do
   bash /app/search.sh "${query}" || echo "Search failed for query: ${query}"
 done
 
-echo
+# echo
 echo "Pipeline finished successfully. Keeping container alive."
 tail -f /dev/null

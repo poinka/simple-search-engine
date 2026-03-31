@@ -10,25 +10,19 @@ QUERY="$*"
 QUERY_VENV=/app/.venv-query
 export CASSANDRA_HOST=${CASSANDRA_HOST:-cassandra-server}
 
-if [ ! -f "${QUERY_VENV}/bin/activate" ]; then
-  echo "Query virtual environment not found at ${QUERY_VENV}"
+if [ ! -x "${QUERY_VENV}/bin/python" ]; then
+  echo "Query python not found at ${QUERY_VENV}/bin/python"
   exit 1
 fi
-
-source "${QUERY_VENV}/bin/activate"
-
-export PYSPARK_DRIVER_PYTHON="${QUERY_VENV}/bin/python"
-unset PYSPARK_PYTHON
 
 spark-submit \
   --master yarn \
   --deploy-mode client \
-  --archives hdfs:///user/root/.venv-query.tar.gz#.venv \
-  --conf spark.yarn.jars=hdfs:///apps/spark/jars/* \
-  --conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=./.venv/bin/python \
-  --conf spark.executorEnv.PYSPARK_PYTHON=./.venv/bin/python \
-  --conf spark.yarn.appMasterEnv.CASSANDRA_HOST="${CASSANDRA_HOST}" \
-  --conf spark.executorEnv.CASSANDRA_HOST="${CASSANDRA_HOST}" \
+  --conf spark.yarn.archive=hdfs:///spark/spark-jars.zip \
+  --conf spark.pyspark.driver.python="${QUERY_VENV}/bin/python" \
+  --conf spark.pyspark.python=/usr/bin/python3 \
+  --conf spark.executorEnv.PYSPARK_PYTHON=/usr/bin/python3 \
+  --conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=/usr/bin/python3 \
   --conf spark.executor.instances=1 \
   --conf spark.executor.cores=1 \
   --conf spark.yarn.am.cores=1 \
@@ -39,5 +33,7 @@ spark-submit \
   --conf spark.yarn.am.memoryOverhead=128 \
   --conf spark.default.parallelism=1 \
   --conf spark.sql.shuffle.partitions=1 \
+  --conf spark.dynamicAllocation.enabled=false \
+  --conf spark.shuffle.service.enabled=false \
   --conf spark.ui.showConsoleProgress=false \
   /app/query.py "$QUERY"

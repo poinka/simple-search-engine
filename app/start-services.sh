@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# This should run only on the master node
 printf "cluster-slave-1\n" > "$HADOOP_HOME/etc/hadoop/workers"
 printf "cluster-slave-1\n" > "$HADOOP_HOME/etc/hadoop/slaves"
 
@@ -9,32 +8,56 @@ echo "Workers configured as:"
 cat "$HADOOP_HOME/etc/hadoop/workers"
 cat "$HADOOP_HOME/etc/hadoop/slaves"
 
-# Start Hadoop services
-"$HADOOP_HOME/sbin/start-dfs.sh" || true
-"$HADOOP_HOME/sbin/start-yarn.sh" || true
-mapred --daemon start historyserver || true
+"$HADOOP_HOME/sbin/start-dfs.sh"
+"$HADOOP_HOME/sbin/start-yarn.sh"
+mapred --daemon start historyserver
 
 echo
-echo "Java processes:"
-jps -lm || true
+echo "Master Java processes:"
+jps -lm
+
+echo
+echo "Worker Java processes:"
+ssh cluster-slave-1 "jps -lm" || true
+
+echo
+echo "Waiting for YARN worker registration..."
+REGISTERED=0
+for i in $(seq 1 24); do
+  if yarn node -list 2>/dev/null | grep -q "RUNNING"; then
+    REGISTERED=1
+    echo "YARN worker node is registered."
+    break
+  fi
+  echo "Retry ${i}/24: YARN worker not registered yet..."
+  sleep 5
+done
+
+if [ "$REGISTERED" -ne 1 ]; then
+  echo "No RUNNING YARN NodeManager found."
+  echo
+  echo "Current YARN nodes:"
+  yarn node -list || true
+  exit 1
+fi
 
 echo
 echo "HDFS report:"
 hdfs dfsadmin -report || true
 
-# Leave safe mode if needed
 hdfs dfsadmin -safemode leave || true
 
-# Prepare HDFS directories
-hdfs dfs -mkdir -p /apps/spark/jars
+hdfs dfs -mkdir -p /spark
 hdfs dfs -mkdir -p /user/root
 
-# Refresh Spark jars in HDFS so repeated runs do not fail
-hdfs dfs -rm -r -f /apps/spark/jars/* || true
-hdfs dfs -put -f /usr/local/spark/jars/* /apps/spark/jars/
+rm -f /tmp/spark-jars.zip
+cd /usr/local/spark/jars
+zip -qr /tmp/spark-jars.zip .
 
-# Permissions
-hdfs dfs -chmod -R 755 /apps/spark/jars || true
+hdfs dfs -rm -f /spark/spark-jars.zip || true
+hdfs dfs -put -f /tmp/spark-jars.zip /spark/spark-jars.zip
+
+hdfs dfs -chmod 644 /spark/spark-jars.zip || true
 hdfs dfs -chmod 755 /user/root || true
 
 echo
@@ -42,9 +65,9 @@ echo "Scala version:"
 scala -version || true
 
 echo
-echo "Java processes after setup:"
-jps -lm || true
+echo "YARN nodes:"
+yarn node -list || true
 
 echo
-echo "Spark jars in HDFS:"
-hdfs dfs -ls /apps/spark/jars | head -20 || true
+echo "Spark archive in HDFS:"
+hdfs dfs -ls /spark || true
